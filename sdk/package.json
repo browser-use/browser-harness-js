@@ -1,0 +1,14 @@
+{
+  "name": "cdp-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "gen": "bun gen.ts",
+    "repl": "bun repl.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0"
+  }
+}
