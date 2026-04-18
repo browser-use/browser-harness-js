@@ -40,7 +40,7 @@ Detect failure with `if browsercode '...'; then ...; else handle_error; fi` or b
 
 ```bash
 browsercode <<'EOF'
-const tabs = await listPageTargets("localhost", 9222);
+const tabs = await listPageTargets();
 globalThis.tid = tabs[0].targetId;
 await session.use(globalThis.tid);
 return globalThis.tid;
@@ -66,7 +66,7 @@ Env vars: `CDP_REPL_PORT` (default `9876`), `CDP_REPL_LOG` (default `/tmp/browse
 These globals are pre-loaded — no imports needed:
 
 - `session` — the persistent `Session`. Has every CDP domain mounted: `session.Page`, `session.DOM`, `session.Runtime`, `session.Network`, … 56 domains, 652 methods total.
-- `listPageTargets(host, port)` — fetch real page targets from `http://host:port/json`, with `chrome://` and `devtools://` URLs filtered out.
+- `listPageTargets()` — list real page targets via CDP's `Target.getTargets` (works on Chrome 144+ too), with `chrome://` and `devtools://` URLs filtered out. No args — uses the connected session.
 - `resolveWsUrl(opts)` — resolve a WS URL from `{wsUrl}` | `{port, host?}` | `{profileDir}`.
 - `CDP` — the generated namespaces (`CDP.Page`, `CDP.Runtime`, …) for type-name reference.
 
@@ -92,30 +92,49 @@ const { nodeId } = await session.DOM.querySelector({ nodeId: root.nodeId, select
 
 ### Connecting
 
-Three ways; always do this **before** any domain calls.
+**Pick the right method based on how Chrome is running. Do not guess — guessing wrong wastes 30s on a timeout.**
+
+| Chrome was launched… | Use | Why |
+|---|---|---|
+| Via **chrome://inspect** (any version, especially Chrome 144+) | `{ profileDir }` | `/json/version` is NOT served — only `DevToolsActivePort` + WS work. |
+| Via `--remote-debugging-port=<port>` (you spawned it yourself) | `{ port }` | Probes `/json/version` to find the WS URL. Fails on Chrome 144+ chrome://inspect. |
+| You already have `ws://…/devtools/browser/<uuid>` | `{ wsUrl }` | Escape hatch. Always works. |
 
 ```js
-// 1. Explicit browser-level WebSocket URL
-await session.connect({ wsUrl: 'ws://localhost:9222/devtools/browser/<id>' })
+// Default for attaching to the user's Chrome (chrome://inspect or modern Chrome):
+await session.connect({
+  profileDir: '/Users/<you>/Library/Application Support/Google/Chrome'
+  // Windows: 'C:\\Users\\<you>\\AppData\\Local\\Google\\Chrome\\User Data'
+  // Linux:   '/home/<you>/.config/google-chrome'
+})
 
-// 2. By port — discovers wsUrl via http://host:port/json/version (Chrome <144 only)
-await session.connect({ port: 9222, host: 'localhost' })
+// When you launched Chrome yourself with --remote-debugging-port=9222:
+await session.connect({ port: 9222 })
 
-// 3. By Chrome profile dir — reads DevToolsActivePort. Required for Chrome 144+.
-await session.connect({ profileDir: '/Users/me/Library/Application Support/Google/Chrome' })
+// When you already have the WS URL (e.g. piped from elsewhere):
+await session.connect({ wsUrl: 'ws://127.0.0.1:9222/devtools/browser/<uuid>' })
 ```
 
-`port` and `profileDir` modes poll for up to 30s — `DevToolsActivePort` can exist before the port is listening.
+`{profileDir}` reads `<profileDir>/DevToolsActivePort` (line 1: port, line 2: WS path) and builds the WS URL directly — no HTTP probe, immune to the Chrome 144+ `/json/version` 404.
+
+**If you see `Error: Chrome at … does not serve /json/version. You are probably on Chrome 144+ via chrome://inspect`** — switch to `{profileDir}` (or `{wsUrl}`). Retrying with `{port}` will just time out again.
 
 ### Picking a target (tab)
 
 After `connect()`, call `session.use(targetId)` once; subsequent page-level calls (Page/DOM/Runtime/Network/etc.) auto-route to that target's sessionId. `Browser.*` and `Target.*` calls always hit the browser endpoint.
 
 ```js
-const tabs = await listPageTargets('localhost', 9222)   // filters chrome:// internals
+const tabs = await listPageTargets()                     // no args; uses the connected session
 const sid  = await session.use(tabs[0].targetId)
 await session.Page.enable()
 await session.Page.navigate({ url: 'https://example.com' })
+```
+
+`listPageTargets()` uses CDP's `Target.getTargets` (not `/json`), so it works on Chrome 144+ too. It already filters out `chrome://` and `devtools://` URLs. Equivalent raw call:
+
+```js
+const { targetInfos } = await session.Target.getTargets({})
+const tabs = targetInfos.filter(t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://'))
 ```
 
 To switch tabs: `session.use(otherTargetId)`. To detach: `session.setActiveSession(undefined)`.
@@ -140,7 +159,7 @@ const ev = await session.waitFor(
 Each snippet runs inside its own async wrapper, so its `let`/`const` declarations vanish when it returns. To carry data forward, attach to `globalThis`:
 
 ```bash
-browsercode '(await listPageTargets("localhost",9222)).forEach((t,i)=>globalThis["tab"+i]=t.targetId)'
+browsercode '(await listPageTargets()).forEach((t,i)=>globalThis["tab"+i]=t.targetId)'
 browsercode 'await session.use(globalThis.tab0)'
 browsercode 'await session.Page.navigate({url:"https://example.com"})'
 ```

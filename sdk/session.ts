@@ -156,33 +156,65 @@ function isBrowserLevel(method: string): boolean {
   return method.startsWith('Browser.') || method.startsWith('Target.');
 }
 
-/** Resolve a WS URL from a variety of input shapes. */
+/**
+ * Resolve a WebSocket URL. Order of preference:
+ *   1. { wsUrl } — explicit.
+ *   2. { profileDir } — reads `<profileDir>/DevToolsActivePort` and builds
+ *      the WS URL directly from its two lines (port + path). This is the
+ *      ONLY method that works on Chrome 144+ / chrome://inspect flow, which
+ *      does not serve `/json/version` over HTTP.
+ *   3. { port } — legacy: probes `http://host:port/json/version`. Works only
+ *      for Chrome launched with `--remote-debugging-port` (older versions or
+ *      explicit-port launches). FAILS on Chrome 144+ attached via
+ *      chrome://inspect — use profileDir or wsUrl instead.
+ */
 export async function resolveWsUrl(opts: ConnectOptions): Promise<string> {
   if (opts.wsUrl) return opts.wsUrl;
 
   if (opts.profileDir) {
-    const port = await readDevToolsActivePort(opts.profileDir);
-    return await fetchBrowserWsUrl(opts.host ?? 'localhost', port);
+    const { port, path } = await readDevToolsActivePort(opts.profileDir);
+    const host = opts.host ?? '127.0.0.1';
+    return `ws://${host}:${port}${path}`;
   }
 
   if (opts.port) {
-    return await fetchBrowserWsUrl(opts.host ?? 'localhost', opts.port);
+    return await fetchBrowserWsUrl(opts.host ?? '127.0.0.1', opts.port);
   }
 
   throw new Error('connect() needs one of: { wsUrl } | { profileDir } | { port }');
 }
 
-async function readDevToolsActivePort(profileDir: string): Promise<number> {
-  const f = Bun.file(`${profileDir}/DevToolsActivePort`);
-  const text = (await f.text()).trim();
-  // First line is the port, second is the path under /devtools/browser/<id>.
-  const port = Number(text.split('\n')[0]);
-  if (!Number.isFinite(port)) throw new Error(`Bad DevToolsActivePort: ${text}`);
-  return port;
+/**
+ * Parse both lines of DevToolsActivePort. Chrome writes:
+ *   line 1: port number
+ *   line 2: path (e.g. "/devtools/browser/<uuid>")
+ * With both in hand we can build `ws://host:port<path>` with no HTTP probe.
+ */
+async function readDevToolsActivePort(profileDir: string): Promise<{ port: number; path: string }> {
+  const deadline = Date.now() + 30_000;
+  let lastErr: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const text = (await Bun.file(`${profileDir}/DevToolsActivePort`).text()).trim();
+      const [portStr, path] = text.split('\n');
+      const port = Number(portStr);
+      if (!Number.isFinite(port)) throw new Error(`malformed port line: ${portStr}`);
+      if (!path || !path.startsWith('/devtools/')) {
+        // File is written atomically but path line may not be there on first open.
+        throw new Error(`missing/invalid path line in DevToolsActivePort: ${JSON.stringify(text)}`);
+      }
+      return { port, path };
+    } catch (e) {
+      lastErr = e;
+      await Bun.sleep(250);
+    }
+  }
+  throw new Error(`Could not read ${profileDir}/DevToolsActivePort after 30s: ${lastErr}`);
 }
 
 async function fetchBrowserWsUrl(host: string, port: number): Promise<string> {
-  // Poll up to 30s — DevToolsActivePort can exist before the port is listening.
+  // Legacy path. Only works for Chrome launched with --remote-debugging-port.
+  // Chrome 144+ chrome://inspect flow does NOT serve /json/version.
   const deadline = Date.now() + 30_000;
   let lastErr: unknown;
   while (Date.now() < deadline) {
@@ -192,19 +224,29 @@ async function fetchBrowserWsUrl(host: string, port: number): Promise<string> {
         const j = await r.json() as { webSocketDebuggerUrl: string };
         if (j.webSocketDebuggerUrl) return j.webSocketDebuggerUrl;
       }
+      if (r.status === 404) {
+        throw new Error(`Chrome at ${host}:${port} does not serve /json/version. You are probably on Chrome 144+ via chrome://inspect — use connect({profileDir: '<path>'}) or connect({wsUrl: '...'}) instead.`);
+      }
       lastErr = new Error(`HTTP ${r.status}`);
     } catch (e) {
       lastErr = e;
+      // If it's the 404 message above, stop immediately — retrying won't help.
+      if (e instanceof Error && e.message.includes('Chrome 144+')) throw e;
     }
     await Bun.sleep(500);
   }
   throw new Error(`Could not reach ${host}:${port}/json/version after 30s: ${lastErr}`);
 }
 
-/** List page targets. Filters out chrome:// internals (omnibox-popup, etc.). */
+/**
+ * List page targets via CDP's `Target.getTargets` (works on all Chrome versions,
+ * including those that do not serve /json). Filters out chrome:// and devtools://
+ * internals. Requires the session to be connected already.
+ */
 export type PageTarget = { targetId: string; title: string; url: string; type: string };
-export async function listPageTargets(host: string, port: number): Promise<PageTarget[]> {
-  const r = await fetch(`http://${host}:${port}/json`);
-  const all = await r.json() as PageTarget[];
-  return all.filter(t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://'));
+export async function listPageTargets(session: Session): Promise<PageTarget[]> {
+  const { targetInfos } = await session.domains.Target.getTargets({});
+  return (targetInfos as PageTarget[]).filter(
+    t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://')
+  );
 }

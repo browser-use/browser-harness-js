@@ -18,7 +18,9 @@ import * as Generated from './generated.ts';
 
 const session = new Session();
 (globalThis as any).session = session;
-(globalThis as any).listPageTargets = listPageTargets;
+// Bind helpers to the singleton session so the agent calls `listPageTargets()`
+// with no args (no host/port confusion, no /json endpoint assumption).
+(globalThis as any).listPageTargets = () => listPageTargets(session);
 (globalThis as any).resolveWsUrl = resolveWsUrl;
 (globalThis as any).CDP = Generated;
 
