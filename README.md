@@ -1,6 +1,6 @@
 <img src="https://r2.browser-use.com/github/ajsdlasnnalsgasld.png" alt="Browser Harness" width="100%" />
 
-# CDP ♞
+# Browser Harness JS ♞
 
 The thinnest possible bridge from the LLM to Chrome. **No harness, no recipes, no rails** — just every CDP method as a typed JS call.
 
@@ -34,14 +34,14 @@ When this page appears, tick the checkbox so the agent can connect to your brows
 
 See [interaction-skills/](interaction-skills/) for recipes on the mechanics that are not obvious from the CDP method list alone.
 
-## How simple is it? (~742 lines of TS, 655 KB of codegen)
+## Files
 
 - `SKILL.md` — day-to-day usage; how to connect, pick a tab, call methods, persist state
-- `sdk/browser-harness-js` (~101 lines) — tiny CLI that auto-spawns the server and forwards snippets
-- `sdk/repl.ts` (~115 lines) — Bun HTTP server holding one persistent `Session`
-- `sdk/session.ts` (~252 lines) — the `Session` class: transport, connect, target routing, events
-- `sdk/gen.ts` (~274 lines) — codegen: reads `browser_protocol.json` + `js_protocol.json` → typed wrappers
-- `sdk/generated.ts` (~655 KB, generated) — every CDP method as `session.<Domain>.<method>(params)`
+- `sdk/browser-harness-js` — tiny CLI that auto-spawns the server and forwards snippets
+- `sdk/repl.ts` — Bun HTTP server holding one persistent `Session`
+- `sdk/session.ts` — the `Session` class: transport, connect, target routing, events
+- `sdk/gen.ts` — codegen: reads `browser_protocol.json` + `js_protocol.json` → typed wrappers
+- `sdk/generated.ts` — every CDP method as `session.<Domain>.<method>(params)` (generated)
 
 No helpers file. No `click()`, no `goto()`, no `upload_file()` — just the protocol, typed.
 
