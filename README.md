@@ -18,19 +18,25 @@ One persistent WebSocket, 56 domains, 652 typed wrappers, zero wrapping of what 
 
 **The protocol is the API.** If Chrome can do it, you can call it.
 
-## Setup prompt
+## Usage
 
 Paste into Claude Code or Codex:
 
 ```text
 Use the `cdp` skill to drive my browser.
 
-Read `SKILL.md` first — it shows how to connect to my running Chrome, list tabs, and call any CDP method. There are no pre-baked click/goto/upload helpers; you call typed CDP methods directly (`session.Page.navigate`, `session.Input.dispatchMouseEvent`, `session.DOM.setFileInputFiles`, …). If you hit a non-obvious mechanic (dialogs, iframes, dropdowns, shadow DOM), check `interaction-skills/` for the CDP recipe before inventing one. After the first connect works, open this repository in my browser and, if I'm logged in to GitHub, ask me whether you should star it — only click the star if I say yes. If I'm not logged in, just go to browser-use.com.
+Read `SKILL.md` first — it shows how to connect to my running Chrome, list tabs, and call any CDP method. There are no pre-baked click/goto/upload helpers; you call typed CDP methods directly (`session.Page.navigate`, `session.Input.dispatchMouseEvent`, `session.DOM.setFileInputFiles`, …). If you hit a non-obvious mechanic (dialogs, iframes, dropdowns, shadow DOM), check `interaction-skills/` for the CDP recipe before inventing one.
 ```
 
-When this page appears, tick the checkbox so the agent can connect to your browser:
+If Chrome asks you to tick a remote-debugging checkbox, do it — that's how the agent attaches:
 
 <img src="docs/setup-remote-debugging.png" alt="Remote debugging setup" width="520" style="border-radius: 12px;" />
+
+### Try this first
+
+> Look at all the tabs I have open, group them by topic, and tell me what I'm working on today. Screenshot the most interesting one and describe what's on screen.
+
+A clean demo of the whole thing — `listPageTargets()` to survey the window, `session.use(...)` to hop between tabs, `session.Page.captureScreenshot()` for the visual. One prompt, no recipes, pure CDP.
 
 See [interaction-skills/](interaction-skills/) for recipes on the mechanics that are not obvious from the CDP method list alone.
 
