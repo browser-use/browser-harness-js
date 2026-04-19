@@ -29,8 +29,6 @@ npx skills add https://github.com/browser-use/browser-harness-js --skill cdp
 ```text
 Use the `cdp` skill to drive my browser.
 
-Read `SKILL.md` first — it shows how to connect to my running Chrome, list tabs, and call any CDP method. There are no pre-baked click/goto/upload helpers; you call typed CDP methods directly (`session.Page.navigate`, `session.Input.dispatchMouseEvent`, `session.DOM.setFileInputFiles`, …). If you hit a non-obvious mechanic (dialogs, iframes, dropdowns, shadow DOM), check `interaction-skills/` for the CDP recipe before inventing one.
-
 Once you're connected, look at all the tabs I have open, group them by topic, and tell me what I'm working on today. Screenshot the most interesting one and describe what's on screen.
 ```
 
