@@ -18,9 +18,13 @@ One persistent WebSocket, 56 domains, 652 typed wrappers, zero wrapping of what 
 
 **The protocol is the API.** If Chrome can do it, you can call it.
 
-## Usage
+## Installation
 
-Paste into Claude Code or Codex:
+```bash
+npx skills add https://github.com/browser-use/browser-harness-ts --skill cdp
+```
+
+## Usage
 
 ```text
 Use the `cdp` skill to drive my browser.
