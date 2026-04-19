@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# browsercode — eval JS in the persistent CDP REPL. Auto-starts the REPL on first use.
+# browser-harness-js — eval JS in the persistent CDP REPL. Auto-starts the REPL on first use.
 #
 # Usage:
-#   browsercode 'await session.connect({port:9222})'
-#   browsercode 'await session.Page.navigate({url:"https://example.com"})'
-#   browsercode <<'EOF'
+#   browser-harness-js 'await session.connect({port:9222})'
+#   browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
+#   browser-harness-js <<'EOF'
 #     const t = await listPageTargets("localhost", 9222);
 #     globalThis.tid = t[0].targetId;
 #     await session.use(globalThis.tid);
 #     globalThis.tid
 #   EOF
 #
-#   browsercode --status   # is the REPL running? prints health JSON
-#   browsercode --stop     # gracefully shut it down
-#   browsercode --logs     # tail the REPL log
-#   browsercode --restart  # stop + start fresh (drops session state)
-#   browsercode --start    # explicit start (no-op if already running)
+#   browser-harness-js --status   # is the REPL running? prints health JSON
+#   browser-harness-js --stop     # gracefully shut it down
+#   browser-harness-js --logs     # tail the REPL log
+#   browser-harness-js --restart  # stop + start fresh (drops session state)
+#   browser-harness-js --start    # explicit start (no-op if already running)
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ PORT="${CDP_REPL_PORT:-9876}"
 HOST="127.0.0.1"
 URL="http://$HOST:$PORT"
 REPL="$HOME/.claude/skills/cdp/sdk/repl.ts"
-LOG="${CDP_REPL_LOG:-/tmp/browsercode.log}"
+LOG="${CDP_REPL_LOG:-/tmp/browser-harness-js.log}"
 
 is_up() {
   curl -fsS --max-time 1 "$URL/health" >/dev/null 2>&1
@@ -36,7 +36,7 @@ start_repl() {
     sleep 0.1
     is_up && return 0
   done
-  echo "browsercode: REPL failed to start on $URL (see $LOG)" >&2
+  echo "browser-harness-js: REPL failed to start on $URL (see $LOG)" >&2
   return 1
 }
 

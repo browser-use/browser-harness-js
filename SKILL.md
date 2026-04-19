@@ -1,22 +1,22 @@
 ---
 name: cdp
-description: Drive Chrome via the DevTools Protocol from JavaScript. Run JS snippets through the `browsercode` CLI — it auto-spawns a long-lived bun HTTP server holding a fully-typed CDP `Session`, and every call (`browsercode 'await session.Page.navigate(...)'`) executes against the same persistent connection. Session, active target, and globals survive across calls. Use when the user wants to automate, script, or inspect a Chrome browser via CDP — single tab or multi-tab, attach to existing Chrome or to a new one launched with --remote-debugging-port.
+description: Drive Chrome via the DevTools Protocol from JavaScript. Run JS snippets through the `browser-harness-js` CLI — it auto-spawns a long-lived bun HTTP server holding a fully-typed CDP `Session`, and every call (`browser-harness-js 'await session.Page.navigate(...)'`) executes against the same persistent connection. Session, active target, and globals survive across calls. Use when the user wants to automate, script, or inspect a Chrome browser via CDP — single tab or multi-tab, attach to existing Chrome or to a new one launched with --remote-debugging-port.
 ---
 
-# CDP — `browsercode` skill
+# CDP — `browser-harness-js` skill
 
-Custom codegen'd CDP SDK (every method from browser_protocol.json + js_protocol.json gets a typed wrapper) plus a tiny HTTP server that holds one persistent CDP `Session`. The `browsercode` CLI auto-starts the server on first use and forwards JS snippets to it.
+Custom codegen'd CDP SDK (every method from browser_protocol.json + js_protocol.json gets a typed wrapper) plus a tiny HTTP server that holds one persistent CDP `Session`. The `browser-harness-js` CLI auto-starts the server on first use and forwards JS snippets to it.
 
-The SDK lives at `~/.claude/skills/cdp/sdk/`. The CLI is symlinked at `/usr/local/bin/browsercode`.
+The SDK lives at `~/.claude/skills/cdp/sdk/`. The CLI is symlinked at `/usr/local/bin/browser-harness-js`.
 
 ## How to use
 
-Just run `browsercode '<JS>'`. The first call spawns the server in the background; subsequent calls hit the same process and so reuse the same `session`, the same WebSocket to Chrome, and any globals you set.
+Just run `browser-harness-js '<JS>'`. The first call spawns the server in the background; subsequent calls hit the same process and so reuse the same `session`, the same WebSocket to Chrome, and any globals you set.
 
 ```bash
-browsercode 'await session.connect({port:9222})'
-browsercode 'await session.Page.navigate({url:"https://example.com"})'
-browsercode '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
+browser-harness-js 'await session.connect({port:9222})'
+browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
+browser-harness-js '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
 ```
 
 Output is the **raw result content** — no `{ok,result}` envelope.
@@ -34,12 +34,12 @@ Error: CDP -32602: invalid params
     at _call (.../session.ts:117:33)
     ...
 ```
-Detect failure with `if browsercode '...'; then ...; else handle_error; fi` or by checking `$?`.
+Detect failure with `if browser-harness-js '...'; then ...; else handle_error; fi` or by checking `$?`.
 
 **Multi-line snippets via stdin (heredoc).** Important: a multi-statement snippet does NOT auto-return the last expression — write `return X` explicitly. Single-expression snippets passed as the first argument DO auto-return.
 
 ```bash
-browsercode <<'EOF'
+browser-harness-js <<'EOF'
 const tabs = await listPageTargets();
 globalThis.tid = tabs[0].targetId;
 await session.use(globalThis.tid);
@@ -51,15 +51,15 @@ EOF
 
 | Command | Behavior |
 |---|---|
-| `browsercode '<js>'`     | Auto-start server if needed, eval the JS, print result. |
-| `browsercode <<EOF…EOF`  | Same, code from stdin. |
-| `browsercode --status`   | Print health JSON (uptime, connected, sessionId) or exit 1 if down. |
-| `browsercode --start`    | Explicit start (no-op if already running). |
-| `browsercode --stop`     | Graceful shutdown. Drops session state. |
-| `browsercode --restart`  | Stop + start fresh. |
-| `browsercode --logs`     | `tail -f` the server log (`/tmp/browsercode.log`). |
+| `browser-harness-js '<js>'`     | Auto-start server if needed, eval the JS, print result. |
+| `browser-harness-js <<EOF…EOF`  | Same, code from stdin. |
+| `browser-harness-js --status`   | Print health JSON (uptime, connected, sessionId) or exit 1 if down. |
+| `browser-harness-js --start`    | Explicit start (no-op if already running). |
+| `browser-harness-js --stop`     | Graceful shutdown. Drops session state. |
+| `browser-harness-js --restart`  | Stop + start fresh. |
+| `browser-harness-js --logs`     | `tail -f` the server log (`/tmp/browser-harness-js.log`). |
 
-Env vars: `CDP_REPL_PORT` (default `9876`), `CDP_REPL_LOG` (default `/tmp/browsercode.log`).
+Env vars: `CDP_REPL_PORT` (default `9876`), `CDP_REPL_LOG` (default `/tmp/browser-harness-js.log`).
 
 ## API surface inside snippets
 
@@ -159,9 +159,9 @@ const ev = await session.waitFor(
 Each snippet runs inside its own async wrapper, so its `let`/`const` declarations vanish when it returns. To carry data forward, attach to `globalThis`:
 
 ```bash
-browsercode '(await listPageTargets()).forEach((t,i)=>globalThis["tab"+i]=t.targetId)'
-browsercode 'await session.use(globalThis.tab0)'
-browsercode 'await session.Page.navigate({url:"https://example.com"})'
+browser-harness-js '(await listPageTargets()).forEach((t,i)=>globalThis["tab"+i]=t.targetId)'
+browser-harness-js 'await session.use(globalThis.tab0)'
+browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
 ```
 
 `session` itself, the active sessionId, and event subscribers are already preserved by the server — globals are only needed for ad-hoc data.
@@ -170,7 +170,7 @@ browsercode 'await session.Page.navigate({url:"https://example.com"})'
 
 When attaching to the user's already-running Chrome instead of spawning fresh Chromium:
 
-1. **Try to attach before asking the user to set anything up.** If `browsercode 'await session.connect({port:9222})'` works, skip the rest.
+1. **Try to attach before asking the user to set anything up.** If `browser-harness-js 'await session.connect({port:9222})'` works, skip the rest.
 2. **Opening the inspect page (macOS):** prefer AppleScript over `open -a` — it reuses the current profile and avoids the profile picker:
    ```bash
    osascript -e 'open location "chrome://inspect/#remote-debugging"'
@@ -199,12 +199,12 @@ When the upstream protocol JSONs change, replace `sdk/browser_protocol.json` and
 
 ```bash
 cd ~/.claude/skills/cdp/sdk && bun gen.ts
-browsercode --restart   # pick up the new bindings
+browser-harness-js --restart   # pick up the new bindings
 ```
 
 ## Files
 
-- `/usr/local/bin/browsercode` → `~/.claude/skills/cdp/sdk/browsercode` (the CLI)
+- `/usr/local/bin/browser-harness-js` → `~/.claude/skills/cdp/sdk/browser-harness-js` (the CLI)
 - `~/.claude/skills/cdp/sdk/repl.ts` — HTTP server (`Bun.serve` on `127.0.0.1:9876`)
 - `~/.claude/skills/cdp/sdk/session.ts` — `Session` class (transport, connect, target routing, events)
 - `~/.claude/skills/cdp/sdk/generated.ts` — codegen output: every CDP method as a typed wrapper
