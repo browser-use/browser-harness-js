@@ -13,7 +13,7 @@
  * the process.
  */
 
-import { Session, listPageTargets, resolveWsUrl } from './session.ts';
+import { Session, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
 import * as Generated from './generated.ts';
 
 const session = new Session();
@@ -22,6 +22,7 @@ const session = new Session();
 // with no args (no host/port confusion, no /json endpoint assumption).
 (globalThis as any).listPageTargets = () => listPageTargets(session);
 (globalThis as any).resolveWsUrl = resolveWsUrl;
+(globalThis as any).detectBrowsers = detectBrowsers;
 (globalThis as any).CDP = Generated;
 
 const PORT = Number(process.env.CDP_REPL_PORT ?? 9876);
