@@ -24,7 +24,7 @@ command -v browser-harness-js >/dev/null || ln -sf <skill-dir>/sdk/browser-harne
 command -v browser-harness-js >/dev/null || { mkdir -p ~/.local/bin && ln -sf <skill-dir>/sdk/browser-harness-js ~/.local/bin/browser-harness-js; }
 ```
 
-Also requires `bun` on PATH (the server is Bun-native).
+The CLI auto-installs `bun` on first run if it's missing (the server is Bun-native). Set `BROWSER_HARNESS_SKIP_BUN_INSTALL=1` to opt out.
 
 ## How to use
 

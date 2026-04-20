@@ -33,7 +33,7 @@ my browser: look at all the tabs I have open, group them by topic, and screensho
 interesting one.
 ```
 
-Requires [`bun`](https://bun.sh) on PATH.
+(The CLI auto-installs [`bun`](https://bun.sh) on first run if it's missing. Set `BROWSER_HARNESS_SKIP_BUN_INSTALL=1` to opt out.)
 
 If Chrome asks you to tick a remote-debugging checkbox, do it — that's how the agent attaches:
 
