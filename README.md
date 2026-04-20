@@ -24,6 +24,21 @@ One persistent WebSocket, 56 domains, 652 typed wrappers, zero wrapping of what 
 npx skills add https://github.com/browser-use/browser-harness-js --skill cdp
 ```
 
+Then put the CLI on any directory that's on your PATH. `<skill-dir>` is the install path — Claude Code: `~/.claude/skills/cdp`; Cursor: `~/.cursor/skills/cdp`; other agents vary.
+
+```bash
+# macOS (Apple Silicon + Homebrew)
+ln -sf <skill-dir>/sdk/browser-harness-js /opt/homebrew/bin/browser-harness-js
+
+# macOS (Intel) / most Linux — may need sudo
+ln -sf <skill-dir>/sdk/browser-harness-js /usr/local/bin/browser-harness-js
+
+# Linux without sudo (ensure ~/.local/bin is on PATH)
+mkdir -p ~/.local/bin && ln -sf <skill-dir>/sdk/browser-harness-js ~/.local/bin/browser-harness-js
+```
+
+Requires [`bun`](https://bun.sh) on PATH (the server is Bun-native).
+
 ## Usage
 
 ```text

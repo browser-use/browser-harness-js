@@ -7,7 +7,9 @@
 ```js
 // Viewport only (default) — fastest, matches what the user sees
 const { data } = await session.Page.captureScreenshot({ format: 'png' })
-await Bun.write('/tmp/shot.png', Buffer.from(data, 'base64'))
+// Cross-platform temp dir: /tmp on Linux, /var/folders/… on macOS, %TEMP% on Windows
+const { tmpdir } = await import('node:os')
+await Bun.write(`${tmpdir()}/shot.png`, Buffer.from(data, 'base64'))
 
 // Full page — stitched beyond the viewport
 await session.Page.captureScreenshot({ format: 'png', captureBeyondViewport: true })

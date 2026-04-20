@@ -7,7 +7,24 @@ description: Drive Chrome via the DevTools Protocol from JavaScript. Run JS snip
 
 Custom codegen'd CDP SDK (every method from browser_protocol.json + js_protocol.json gets a typed wrapper) plus a tiny HTTP server that holds one persistent CDP `Session`. The `browser-harness-js` CLI auto-starts the server on first use and forwards JS snippets to it.
 
-The SDK lives at `~/.claude/skills/cdp/sdk/`. The CLI is symlinked at `/usr/local/bin/browser-harness-js`.
+The SDK lives in the skill's `sdk/` directory. In the rest of this doc, `<skill-dir>` refers to wherever `npx skills add` installed the skill (Claude Code: `~/.claude/skills/cdp`; Cursor: `~/.cursor/skills/cdp`; other agents vary). The CLI should be on PATH as `browser-harness-js`.
+
+## Setup (once, first use)
+
+`npx skills add` drops the skill into your agent's skills directory but does NOT put the CLI on PATH. Before the first call, verify it's reachable and symlink it into any directory on your PATH if not:
+
+```bash
+# macOS (Apple Silicon + Homebrew)
+command -v browser-harness-js >/dev/null || ln -sf <skill-dir>/sdk/browser-harness-js /opt/homebrew/bin/browser-harness-js
+
+# macOS (Intel) / most Linux — may need sudo
+command -v browser-harness-js >/dev/null || ln -sf <skill-dir>/sdk/browser-harness-js /usr/local/bin/browser-harness-js
+
+# Linux without sudo (ensure ~/.local/bin is on PATH)
+command -v browser-harness-js >/dev/null || { mkdir -p ~/.local/bin && ln -sf <skill-dir>/sdk/browser-harness-js ~/.local/bin/browser-harness-js; }
+```
+
+Also requires `bun` on PATH (the server is Bun-native).
 
 ## How to use
 
@@ -171,10 +188,18 @@ browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
 When attaching to the user's already-running Chrome instead of spawning fresh Chromium:
 
 1. **Try to attach before asking the user to set anything up.** If `browser-harness-js 'await session.connect({port:9222})'` works, skip the rest.
-2. **Opening the inspect page (macOS):** prefer AppleScript over `open -a` — it reuses the current profile and avoids the profile picker:
+2. **Opening the inspect page:**
    ```bash
+   # macOS — prefer AppleScript over `open -a` (reuses current profile, avoids the profile picker)
    osascript -e 'open location "chrome://inspect/#remote-debugging"'
+
+   # Linux
+   google-chrome 'chrome://inspect/#remote-debugging'     # or: chromium, google-chrome-stable
+
+   # Windows (PowerShell)
+   Start-Process chrome 'chrome://inspect/#remote-debugging'
    ```
+   Only macOS's AppleScript path avoids the profile picker; Linux/Windows may prompt the user to pick a profile first.
 3. **Profile picker.** Chrome may open the profile picker before any real tab exists. Tell the user to choose their normal profile first, then tick the checkbox and click **Allow** if shown.
 4. **First connect may block on the Allow dialog.** If `connect` hangs, tell the user to click **Allow** in Chrome — `connect()` polls for up to 30 seconds.
 5. **Chrome 144+ does NOT serve `/json/version` from chrome://inspect.** Use `connect({profileDir: '...'})` to read the port from `DevToolsActivePort` instead.
@@ -187,10 +212,10 @@ When attaching to the user's already-running Chrome instead of spawning fresh Ch
 
 ## Looking up a method
 
-The full typed surface is in `~/.claude/skills/cdp/sdk/generated.ts` (~655 KB, only loaded if you read it). Each method has its CDP description as a JSDoc comment plus typed `*Params` / `*Return` interfaces in per-domain namespaces.
+The full typed surface is in `<skill-dir>/sdk/generated.ts` (~655 KB, only loaded if you read it). Each method has its CDP description as a JSDoc comment plus typed `*Params` / `*Return` interfaces in per-domain namespaces.
 
 ```bash
-grep -n "navigate" ~/.claude/skills/cdp/sdk/generated.ts | head
+grep -n "navigate" <skill-dir>/sdk/generated.ts | head
 ```
 
 ## Regenerating the SDK
@@ -198,15 +223,17 @@ grep -n "navigate" ~/.claude/skills/cdp/sdk/generated.ts | head
 When the upstream protocol JSONs change, replace `sdk/browser_protocol.json` and/or `sdk/js_protocol.json` and re-run:
 
 ```bash
-cd ~/.claude/skills/cdp/sdk && bun gen.ts
+cd <skill-dir>/sdk && bun gen.ts
 browser-harness-js --restart   # pick up the new bindings
 ```
 
 ## Files
 
-- `/usr/local/bin/browser-harness-js` → `~/.claude/skills/cdp/sdk/browser-harness-js` (the CLI)
-- `~/.claude/skills/cdp/sdk/repl.ts` — HTTP server (`Bun.serve` on `127.0.0.1:9876`)
-- `~/.claude/skills/cdp/sdk/session.ts` — `Session` class (transport, connect, target routing, events)
-- `~/.claude/skills/cdp/sdk/generated.ts` — codegen output: every CDP method as a typed wrapper
-- `~/.claude/skills/cdp/sdk/gen.ts` — codegen script
-- `~/.claude/skills/cdp/sdk/{browser,js}_protocol.json` — upstream protocol (vendored)
+All paths are relative to `<skill-dir>` (the install path — see top of this doc).
+
+- `/usr/local/bin/browser-harness-js` → `<skill-dir>/sdk/browser-harness-js` (the CLI)
+- `sdk/repl.ts` — HTTP server (`Bun.serve` on `127.0.0.1:9876`)
+- `sdk/session.ts` — `Session` class (transport, connect, target routing, events)
+- `sdk/generated.ts` — codegen output: every CDP method as a typed wrapper
+- `sdk/gen.ts` — codegen script
+- `sdk/{browser,js}_protocol.json` — upstream protocol (vendored)

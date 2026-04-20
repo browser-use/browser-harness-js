@@ -22,7 +22,16 @@ set -euo pipefail
 PORT="${CDP_REPL_PORT:-9876}"
 HOST="127.0.0.1"
 URL="http://$HOST:$PORT"
-REPL="$HOME/.claude/skills/cdp/sdk/repl.ts"
+
+# Resolve repl.ts alongside this script, following symlinks (e.g. /usr/local/bin/browser-harness-js → <skill-dir>/sdk/browser-harness-js).
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+REPL="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)/repl.ts"
+
 LOG="${CDP_REPL_LOG:-/tmp/browser-harness-js.log}"
 
 is_up() {

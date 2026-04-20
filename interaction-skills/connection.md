@@ -66,10 +66,16 @@ When the user says "the first tab I can see", do NOT trust the order of `Target.
 
 If `session.connect()` hangs, tell the user to click **Allow** in Chrome. The connect flow polls for up to 30s.
 
-## Bringing Chrome to front (macOS)
+## Bringing Chrome to front
 
 ```bash
+# macOS — prefer AppleScript over `open -a` (reuses current profile, avoids the profile picker)
 osascript -e 'tell application "Google Chrome" to activate'
-```
 
-Prefer AppleScript over `open -a` — reuses the current profile, avoids the profile picker.
+# Linux (X11) — use wmctrl or xdotool
+wmctrl -a 'Google Chrome'
+xdotool search --name 'Google Chrome' windowactivate
+
+# Windows (PowerShell)
+powershell -NoProfile -Command "(New-Object -ComObject WScript.Shell).AppActivate('Google Chrome')"
+```
