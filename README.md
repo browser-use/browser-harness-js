@@ -24,28 +24,16 @@ One persistent WebSocket, 56 domains, 652 typed wrappers, zero wrapping of what 
 npx skills add https://github.com/browser-use/browser-harness-js --skill cdp
 ```
 
-Then put the CLI on any directory that's on your PATH. `<skill-dir>` is the install path — Claude Code: `~/.claude/skills/cdp`; Cursor: `~/.cursor/skills/cdp`; other agents vary.
-
-```bash
-# macOS (Apple Silicon + Homebrew)
-ln -sf <skill-dir>/sdk/browser-harness-js /opt/homebrew/bin/browser-harness-js
-
-# macOS (Intel) / most Linux — may need sudo
-ln -sf <skill-dir>/sdk/browser-harness-js /usr/local/bin/browser-harness-js
-
-# Linux without sudo (ensure ~/.local/bin is on PATH)
-mkdir -p ~/.local/bin && ln -sf <skill-dir>/sdk/browser-harness-js ~/.local/bin/browser-harness-js
-```
-
-Requires [`bun`](https://bun.sh) on PATH (the server is Bun-native).
-
-## Usage
+Or paste this into your agent — it'll install the skill, put the CLI on your PATH, and run a first task:
 
 ```text
-Use the `cdp` skill to drive my browser.
-
-Once you're connected, look at all the tabs I have open, group them by topic, and tell me what I'm working on today. Screenshot the most interesting one and describe what's on screen.
+Run `npx skills add https://github.com/browser-use/browser-harness-js --skill cdp`, then
+symlink `browser-harness-js` into a directory on my PATH, then use the cdp skill to drive
+my browser: look at all the tabs I have open, group them by topic, and screenshot the most
+interesting one.
 ```
+
+Requires [`bun`](https://bun.sh) on PATH.
 
 If Chrome asks you to tick a remote-debugging checkbox, do it — that's how the agent attaches:
 
