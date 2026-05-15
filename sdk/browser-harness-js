@@ -19,6 +19,18 @@
 
 set -euo pipefail
 
+load_env_file() {
+  local file="$1"
+  [ -r "$file" ] || return 0
+  set -a
+  # shellcheck disable=SC1090
+  . "$file"
+  set +a
+}
+
+load_env_file /etc/bux/env
+load_env_file "$HOME/.claude/browser.env"
+
 PORT="${CDP_REPL_PORT:-9876}"
 HOST="127.0.0.1"
 URL="http://$HOST:$PORT"
@@ -80,7 +92,7 @@ post_eval() {
   # Capture body + status separately. Body goes to stdout (only if non-empty)
   # on 200; otherwise to stderr with non-zero exit.
   local out status body
-  out=$(curl -sS -w '\n___STATUS___%{http_code}' --data-binary "$1" "$URL/eval")
+  out=$(printf '%s' "$1" | curl -sS -w '\n___STATUS___%{http_code}' --data-binary @- "$URL/eval")
   status="${out##*___STATUS___}"
   body="${out%$'\n'___STATUS___*}"
   if [ "$status" = "200" ]; then
@@ -90,6 +102,29 @@ post_eval() {
     [ -n "$body" ] && printf '%s\n' "$body" >&2
     return 1
   fi
+}
+
+js_single_quote() {
+  printf '%s' "$1" | sed -e "s/\\\\/\\\\\\\\/g" -e "s/'/\\\\'/g"
+}
+
+sync_repl_env() {
+  local code="" name value
+  for name in \
+    BROWSER_USE_API_KEY \
+    BUX_PROFILE_ID \
+    BU_PROFILE_ID \
+    BU_BROWSER_ID \
+    BU_CDP_WS \
+    BU_BROWSER_LIVE_URL \
+    BU_BROWSER_EXPIRES_AT
+  do
+    value="${!name:-}"
+    [ -n "$value" ] || continue
+    code="${code}process.env.${name}='$(js_single_quote "$value")';"
+  done
+  [ -n "$code" ] || return 0
+  printf '%s' "$code" | curl -fsS --max-time 2 --data-binary @- "$URL/eval" >/dev/null || true
 }
 
 case "${1:-}" in
@@ -103,6 +138,7 @@ case "${1:-}" in
     ;;
   --start)
     start_repl
+    sync_repl_env
     curl -sS "$URL/health"; echo
     ;;
   --stop)
@@ -117,6 +153,7 @@ case "${1:-}" in
     is_up && curl -s -X POST "$URL/quit" >/dev/null 2>&1 || true
     sleep 0.2
     start_repl
+    sync_repl_env
     curl -sS "$URL/health"; echo
     ;;
   --logs)
@@ -127,11 +164,13 @@ case "${1:-}" in
     ;;
   "")
     start_repl
+    sync_repl_env
     code="$(cat)"
     post_eval "$code"
     ;;
   *)
     start_repl
+    sync_repl_env
     post_eval "$1"
     ;;
 esac

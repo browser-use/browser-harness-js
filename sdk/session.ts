@@ -103,6 +103,7 @@ export class Session implements Transport {
 
   private openWs(wsUrl: string, timeoutMs: number): Promise<void> {
     return new Promise<void>((res, rej) => {
+      this.activeSessionId = undefined;
       const ws = new WebSocket(wsUrl);
       let done = false;
       const finish = (err?: Error) => {
@@ -119,6 +120,10 @@ export class Session implements Transport {
       ws.addEventListener('close', () => {
         for (const [, p] of this.pending) p.reject(new Error('CDP socket closed'));
         this.pending.clear();
+        if (this.ws === ws) {
+          this.ws = undefined;
+          this.activeSessionId = undefined;
+        }
         finish(new Error('WS closed before open (likely 403 or port closed)'));
       });
       this.ws = ws;
@@ -178,10 +183,8 @@ export class Session implements Transport {
   }
 
   // Transport implementation. Called by the generated domain bindings.
-  _call(method: string, params: unknown = {}): Promise<unknown> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error('Not connected. Call session.connect(...) first.'));
-    }
+  async _call(method: string, params: unknown = {}): Promise<unknown> {
+    const ws = await this.ensureOpen();
     const id = this.nextId++;
     const msg: Record<string, unknown> = { id, method, params: params ?? {} };
     if (this.activeSessionId && !isBrowserLevel(method)) {
@@ -189,8 +192,27 @@ export class Session implements Transport {
     }
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.ws!.send(JSON.stringify(msg));
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch (e) {
+        this.pending.delete(id);
+        reject(e);
+      }
     });
+  }
+
+  private async ensureOpen(timeoutMs = 1_000): Promise<WebSocket> {
+    const ws = this.ws;
+    if (!ws) throw new Error('Not connected. Call session.connect(...) first.');
+
+    const deadline = Date.now() + timeoutMs;
+    while (ws.readyState === WebSocket.CONNECTING && Date.now() < deadline) {
+      await Bun.sleep(10);
+    }
+    if (ws.readyState !== WebSocket.OPEN) {
+      throw new Error('Not connected. Call session.connect(...) first.');
+    }
+    return ws;
   }
 
   private onMessage(raw: string): void {
@@ -376,4 +398,3 @@ async function tryReadDevToolsActivePort(
     return undefined;
   }
 }
-
