@@ -77,6 +77,7 @@ export class Session implements Transport {
     if (opts.wsUrl || opts.profileDir) {
       const wsUrl = await resolveWsUrl(opts);
       await this.openWs(wsUrl, timeoutMs);
+      await this.useDefaultPageTarget();
       return;
     }
     const browsers = await detectBrowsers();
@@ -90,6 +91,7 @@ export class Session implements Transport {
     for (const b of browsers) {
       try {
         await this.openWs(b.wsUrl, timeoutMs);
+        await this.useDefaultPageTarget();
         return;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -146,6 +148,28 @@ export class Session implements Transport {
     const r = await this._call('Target.attachToTarget', { targetId, flatten: true }) as { sessionId: string };
     this.activeSessionId = r.sessionId;
     return r.sessionId;
+  }
+
+  /**
+   * Fresh connections start on Chrome's browser endpoint, but Page/DOM/Runtime
+   * methods only exist on page targets. Attach the first available page target
+   * so common one-liners can call `session.Page.navigate(...)` immediately
+   * after `session.connect(...)`.
+   */
+  private async useDefaultPageTarget(): Promise<void> {
+    const { targetInfos } = await this._call('Target.getTargets', {}) as { targetInfos: PageTarget[] };
+    const page = targetInfos.find(t =>
+      t.type === 'page' &&
+      !t.url.startsWith('chrome://') &&
+      !t.url.startsWith('devtools://')
+    );
+    if (page) {
+      await this.use(page.targetId);
+      return;
+    }
+
+    const created = await this._call('Target.createTarget', { url: 'about:blank' }) as { targetId: string };
+    await this.use(created.targetId);
   }
 
   /** Set the active sessionId directly (e.g. one you already attached). */

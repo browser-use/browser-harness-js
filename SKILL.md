@@ -150,7 +150,7 @@ await session.connect({ profileDir: '/Users/<you>/Library/Application Support/Go
 
 ### Picking a target (tab)
 
-After `connect()`, call `session.use(targetId)` once; subsequent page-level calls (Page/DOM/Runtime/Network/etc.) auto-route to that target's sessionId. `Browser.*` and `Target.*` calls always hit the browser endpoint.
+After `connect()`, the harness automatically attaches one non-internal page target. Call `session.use(targetId)` when you want a specific tab; subsequent page-level calls (Page/DOM/Runtime/Network/etc.) auto-route to that target's sessionId. `Browser.*` and `Target.*` calls always hit the browser endpoint.
 
 ```js
 const tabs = await listPageTargets()                     // no args; uses the connected session
@@ -218,6 +218,7 @@ When attaching to the user's already-running browser:
 
 ## Working with targets (tabs)
 
+- **Default page target.** `session.connect()` attaches the first non-internal page target automatically, creating `about:blank` if needed, so common one-liners can call `session.Page.navigate(...)` immediately after connecting.
 - **Filter Chrome internals.** `listPageTargets()` already drops `chrome://` and `devtools://` URLs. If you call `Target.getTargets()` directly, filter manually.
 - **CDP target order ≠ visible tab-strip order.** When the user says "the first tab I can see", use a screenshot or page title to identify it — `Target.activateTarget` only switches to a known targetId.
 
