@@ -51,6 +51,14 @@ async function runSnippet(code: string): Promise<unknown> {
   return await (0, eval)(wrapped);
 }
 
+let evalQueue: Promise<void> = Promise.resolve();
+
+function enqueueEval<T>(task: () => Promise<T>): Promise<T> {
+  const run = evalQueue.then(task, task);
+  evalQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 const TEXT = { 'content-type': 'text/plain; charset=utf-8' } as const;
 
 /**
@@ -89,7 +97,7 @@ const server = Bun.serve({
         return new Response('empty body\n', { status: 400, headers: TEXT });
       }
       try {
-        const result = await runSnippet(code);
+        const result = await enqueueEval(() => runSnippet(code));
         const body = renderResult(result);
         return new Response(body, { status: 200, headers: TEXT });
       } catch (e: any) {
@@ -114,3 +122,5 @@ console.log(JSON.stringify({
   port: server.port,
   message: `CDP REPL listening on http://127.0.0.1:${server.port}`,
 }));
+
+await new Promise(() => {});

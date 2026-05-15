@@ -79,7 +79,11 @@ is_up() {
 start_repl() {
   is_up && return 0
   ensure_bun || return 1
-  CDP_REPL_PORT="$PORT" nohup bun "$REPL" >"$LOG" 2>&1 &
+  if command -v setsid >/dev/null 2>&1; then
+    CDP_REPL_PORT="$PORT" setsid -f bun "$REPL" >"$LOG" 2>&1 < /dev/null
+  else
+    CDP_REPL_PORT="$PORT" nohup bun "$REPL" >"$LOG" 2>&1 < /dev/null &
+  fi
   for _ in $(seq 1 100); do
     sleep 0.1
     is_up && return 0
@@ -124,7 +128,7 @@ sync_repl_env() {
     code="${code}process.env.${name}='$(js_single_quote "$value")';"
   done
   [ -n "$code" ] || return 0
-  printf '%s' "$code" | curl -fsS --max-time 2 --data-binary @- "$URL/eval" >/dev/null || true
+  printf '%s' "$code" | curl -fsS --max-time 2 --data-binary @- "$URL/eval" >/dev/null 2>&1 || true
 }
 
 case "${1:-}" in
