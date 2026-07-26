@@ -187,10 +187,15 @@ export class Session implements Transport {
     if (this.activeSessionId && !isBrowserLevel(method)) {
       msg.sessionId = this.activeSessionId;
     }
-    return new Promise((resolve, reject) => {
+    const promise = new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.ws!.send(JSON.stringify(msg));
     });
+    // A snippet may intentionally fire-and-forget a CDP command. Keep an
+    // ignored rejection from terminating Bun while preserving the original
+    // promise's rejection for callers that await it.
+    void promise.catch(() => {});
+    return promise;
   }
 
   private onMessage(raw: string): void {

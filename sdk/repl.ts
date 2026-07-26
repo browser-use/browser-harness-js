@@ -27,6 +27,16 @@ const session = new Session();
 
 const PORT = Number(process.env.CDP_REPL_PORT ?? 9876);
 const startedAt = Date.now();
+// Snippets run in global scope and may overwrite globalThis.eval. Keep the
+// evaluator itself immutable for the lifetime of this server process.
+const indirectEval: typeof eval = eval;
+
+process.on('unhandledRejection', (reason) => {
+  const message = reason instanceof Error
+    ? reason.stack ?? reason.message
+    : String(reason);
+  console.error(`[browser-harness-js] Detached promise rejected: ${message}`);
+});
 
 function isExpression(code: string): boolean {
   const trimmed = code.trim();
@@ -48,7 +58,7 @@ function serialize(v: unknown): unknown {
 async function runSnippet(code: string): Promise<unknown> {
   const body = isExpression(code) ? `return (${code});` : code;
   const wrapped = `(async () => { ${body} })()`;
-  return await (0, eval)(wrapped);
+  return await indirectEval(wrapped);
 }
 
 const TEXT = { 'content-type': 'text/plain; charset=utf-8' } as const;
