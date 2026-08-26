@@ -219,7 +219,7 @@ export class CdpError extends Error {
 
 /** Browser-level methods never take a sessionId. */
 function isBrowserLevel(method: string): boolean {
-  return method.startsWith('Browser.') || method.startsWith('Target.');
+  return method.startsWith('Browser.') || method.startsWith('Target.') || method.startsWith('Extensions.');
 }
 
 /**
@@ -376,4 +376,3 @@ async function tryReadDevToolsActivePort(
     return undefined;
   }
 }
-
