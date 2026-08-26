@@ -24,6 +24,23 @@ command -v browser-harness-js >/dev/null || ln -sf <skill-dir>/sdk/browser-harne
 command -v browser-harness-js >/dev/null || { mkdir -p ~/.local/bin && ln -sf <skill-dir>/sdk/browser-harness-js ~/.local/bin/browser-harness-js; }
 ```
 
+On Windows, the bundled `browser-harness-js.cmd` uses Git for Windows Bash to run the
+same CLI. Add the skill's `sdk` directory to the user PATH from PowerShell (replace
+`<skill-dir>` with the real install path):
+
+```powershell
+$cliDir = (Resolve-Path '<skill-dir>\sdk').Path
+[string]$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (($userPath -split ';') -notcontains $cliDir) {
+  [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $cliDir), 'User')
+}
+$env:Path = $env:Path.TrimEnd(';') + ';' + $cliDir
+browser-harness-js --start
+```
+
+Git for Windows is required. If Bash is installed somewhere else, set
+`BROWSER_HARNESS_JS_BASH` to the full path of `bash.exe`.
+
 The CLI auto-installs `bun` on first run if it's missing (the server is Bun-native). Set `BROWSER_HARNESS_SKIP_BUN_INSTALL=1` to opt out.
 
 ## How to use
@@ -243,6 +260,7 @@ browser-harness-js --restart   # pick up the new bindings
 All paths are relative to `<skill-dir>` (the install path — see top of this doc).
 
 - `/usr/local/bin/browser-harness-js` → `<skill-dir>/sdk/browser-harness-js` (the CLI)
+- `sdk/browser-harness-js.cmd` — Windows launcher (the `sdk` directory itself goes on PATH)
 - `sdk/repl.ts` — HTTP server (`Bun.serve` on `127.0.0.1:9876`)
 - `sdk/session.ts` — `Session` class (transport, connect, target routing, events)
 - `sdk/generated.ts` — codegen output: every CDP method as a typed wrapper
