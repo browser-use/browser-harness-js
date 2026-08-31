@@ -28,9 +28,9 @@ Or paste this into your agent — it'll install the skill, put the CLI on your P
 
 ```text
 Run `npx skills add https://github.com/browser-use/browser-harness-js --skill cdp`, then
-symlink `browser-harness-js` into a directory on my PATH, then use the cdp skill to drive
-my browser: look at all the tabs I have open, group them by topic, and screenshot the most
-interesting one.
+put the skill's `sdk` directory on my PATH, then use the cdp skill to drive my browser:
+look at all the tabs I have open, group them by topic, and screenshot the most interesting
+one. Follow the skill's setup steps for my operating system.
 ```
 
 (The CLI auto-installs [`bun`](https://bun.sh) on first run if it's missing. Set `BROWSER_HARNESS_SKIP_BUN_INSTALL=1` to opt out.)
@@ -45,6 +45,7 @@ See [interaction-skills/](interaction-skills/) for recipes on the mechanics that
 
 - `SKILL.md` — day-to-day usage; how to connect, pick a tab, call methods, persist state
 - `sdk/browser-harness-js` — tiny CLI that auto-spawns the server and forwards snippets
+- `sdk/browser-harness-js.cmd` — Windows launcher that delegates to Git for Windows Bash
 - `sdk/repl.ts` — Bun HTTP server holding one persistent `Session`
 - `sdk/session.ts` — the `Session` class: transport, connect, target routing, events
 - `sdk/gen.ts` — codegen: reads `browser_protocol.json` + `js_protocol.json` → typed wrappers
