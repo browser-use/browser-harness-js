@@ -70,8 +70,7 @@ await session.use(targetId)
 1. `await session.connect()` — auto-detect the running browser.
 2. `const tabs = await listPageTargets()` — see what real pages exist.
 3. `await session.use(tabs[0].targetId)` — route Page/DOM/Runtime/Network calls to that target.
-4. `await session.Target.activateTarget({ targetId: tabs[0].targetId })` — bring the tab visually to front.
-5. Enable the domains you need: `await session.Page.enable()`, `await session.Network.enable({})`, etc.
+4. Enable the domains you need: `await session.Page.enable()`, `await session.Network.enable({})`, etc.
 
 ## CDP target order ≠ visible tab-strip order
 
@@ -83,7 +82,7 @@ When the user says "the first tab I can see", do NOT trust the order of `Target.
 
 `Target.activateTarget` only switches to a targetId you already know — it cannot resolve "leftmost tab".
 
-## Bringing Chrome to front
+## Bringing Chrome to front (when needed)
 
 ```bash
 # macOS — prefer AppleScript over `open -a` (reuses current profile, avoids the profile picker)
