@@ -69,6 +69,7 @@ EOF
 | Command | Behavior |
 |---|---|
 | `browser-harness-js '<js>'`     | Auto-start server if needed, eval the JS, print result. |
+| `browser-harness-js --session <id> '<js>'` | Eval with all target-scoped CDP calls/events pinned to that existing sessionId. |
 | `browser-harness-js <<EOF…EOF`  | Same, code from stdin. |
 | `browser-harness-js --status`   | Print health JSON (uptime, connected, sessionId) or exit 1 if down. |
 | `browser-harness-js --start`    | Explicit start (no-op if already running). |
@@ -158,6 +159,16 @@ const sid  = await session.use(tabs[0].targetId)
 await session.Page.enable()
 await session.Page.navigate({ url: 'https://example.com' })
 ```
+
+**Concurrent agents:** prefer `session.attach(targetId)` (which does not change the shared active session), keep the returned sessionId, and pass `--session <id>` on every later target-scoped CLI call. The same long-lived CDP session is reused across calls, including event subscriptions/waits, without another caller's `session.use()` changing its route.
+
+```bash
+browser-harness-js 'await session.attach((await listPageTargets())[0].targetId)'  # prints <sessionId>
+browser-harness-js --session '<sessionId>' 'await session.Page.enable()'
+browser-harness-js --session '<sessionId>' '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
+```
+
+`session.use(targetId)` remains available for single-caller/backward-compatible workflows; do not rely on its shared active session for concurrent agents. When `--session <id>` is used, `session.onEvent(...)` and `session.waitFor(...)` are automatically filtered to that session.
 
 `listPageTargets()` uses CDP's `Target.getTargets` (not `/json`), so it works on Chrome 144+ too. It already filters out `chrome://` and `devtools://` URLs. Equivalent raw call:
 
