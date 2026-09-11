@@ -2,14 +2,12 @@
 # browser-harness-js — eval JS in the persistent CDP REPL. Auto-starts the REPL on first use.
 #
 # Usage:
-#   browser-harness-js 'await session.connect({port:9222})'
-#   browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
+#   browser-harness-js 'await session.connect()'
+#   browser-harness-js 'await session.attach((await listPageTargets())[0].targetId)'  # prints <sessionId>
 #   browser-harness-js --session <sessionId> 'await session.Page.navigate({url:"https://example.com"})'
 #   browser-harness-js <<'EOF'
-#     const t = await listPageTargets("localhost", 9222);
-#     globalThis.tid = t[0].targetId;
-#     await session.use(globalThis.tid);
-#     globalThis.tid
+#     const tabs = await listPageTargets();
+#     return tabs.map(t => ({ targetId: t.targetId, title: t.title, url: t.url }));
 #   EOF
 #
 #   browser-harness-js --status   # is the REPL running? prints health JSON

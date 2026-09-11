@@ -59,7 +59,7 @@ Mobile triggers responsive breakpoints and enables touch events. Sites with `@me
 
 ## `w=0 h=0` is a target problem, not a viewport problem
 
-If `Runtime.evaluate('innerWidth')` returns 0, you're attached to a non-window surface (omnibox popup, a DevTools target). See `connection.md` / `tabs.md` — use `listPageTargets()` and re-route with `session.use(...)`.
+If `Runtime.evaluate('innerWidth')` returns 0, you're attached to a non-window surface (omnibox popup, a DevTools target). See `connection.md` / `tabs.md` — use `listPageTargets()`, attach the correct target, and continue with that target's explicit sessionId.
 
 ## Traps
 

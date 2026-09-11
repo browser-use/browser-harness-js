@@ -1,6 +1,6 @@
 ---
 name: cdp
-description: Drive Chrome via the DevTools Protocol from JavaScript. Run JS snippets through the `browser-harness-js` CLI — it auto-spawns a long-lived bun HTTP server holding a fully-typed CDP `Session`, and every call (`browser-harness-js 'await session.Page.navigate(...)'`) executes against the same persistent connection. Session, active target, and globals survive across calls. Use when the user wants to automate, script, or inspect a Chrome browser via CDP — single tab or multi-tab, attach to existing Chrome or to a new one launched with --remote-debugging-port.
+description: Drive Chrome via the DevTools Protocol from JavaScript. Run JS snippets through the `browser-harness-js` CLI — it auto-spawns a long-lived bun HTTP server holding a fully-typed CDP `Session`, and every call executes against the same persistent browser connection. Attached CDP sessions and globals can survive across calls; target-scoped work uses an explicit sessionId so concurrent callers cannot change each other's routing. Use when the user wants to automate, script, or inspect a Chrome browser via CDP — single tab or multi-tab, attach to existing Chrome or to a new one launched with --remote-debugging-port.
 ---
 
 # CDP — `browser-harness-js` skill
@@ -28,12 +28,13 @@ The CLI auto-installs `bun` on first run if it's missing (the server is Bun-nati
 
 ## How to use
 
-Just run `browser-harness-js '<JS>'`. The first call spawns the server in the background; subsequent calls hit the same process and so reuse the same `session`, the same WebSocket to Chrome, and any globals you set.
+Just run `browser-harness-js '<JS>'`. The first call spawns the server in the background; subsequent calls hit the same process and reuse the same browser WebSocket and any globals you set. Treat the REPL as shared: for work scoped to a page/iframe target, attach once, keep the returned sessionId, and pass `--session <id>` on every later target-scoped call.
 
 ```bash
 browser-harness-js 'await session.connect()'
-browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
-browser-harness-js '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
+browser-harness-js 'await session.attach((await listPageTargets())[0].targetId)'  # prints <sessionId>
+browser-harness-js --session '<sessionId>' 'await session.Page.navigate({url:"https://example.com"})'
+browser-harness-js --session '<sessionId>' '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
 ```
 
 Output is the **raw result content** — no `{ok,result}` envelope.
@@ -58,9 +59,7 @@ Detect failure with `if browser-harness-js '...'; then ...; else handle_error; f
 ```bash
 browser-harness-js <<'EOF'
 const tabs = await listPageTargets();
-globalThis.tid = tabs[0].targetId;
-await session.use(globalThis.tid);
-return globalThis.tid;
+return tabs.map(t => ({ targetId: t.targetId, title: t.title, url: t.url }));
 EOF
 ```
 
@@ -83,7 +82,7 @@ Env vars: `CDP_REPL_PORT` (default `9876`), `CDP_REPL_LOG` (default `/tmp/browse
 
 These globals are pre-loaded — no imports needed:
 
-- `session` — the persistent `Session`. Has every CDP domain mounted: `session.Page`, `session.DOM`, `session.Runtime`, `session.Network`, … 56 domains, 652 methods total.
+- `session` — the CDP session view for the current request. Without `--session`, it is the browser-level root `Session`; with `--session <id>`, target-scoped domains are pinned to that attached sessionId. It exposes every CDP domain: `session.Page`, `session.DOM`, `session.Runtime`, `session.Network`, … 56 domains, 652 methods total.
 - `listPageTargets()` — list real page targets via CDP's `Target.getTargets` (works on Chrome 144+ too), with `chrome://` and `devtools://` URLs filtered out. No args — uses the connected session.
 - `detectBrowsers()` — scan OS-specific profile dirs for running Chromium-based browsers with remote debugging on. Returns `[{name, profileDir, port, wsPath, wsUrl, mtimeMs}]`, sorted by most recently launched.
 - `resolveWsUrl(opts)` — resolve a WS URL from `{wsUrl}` | `{port, host?}` | `{profileDir}`. For the no-args auto-detect flow, call `session.connect()` directly instead.
@@ -92,6 +91,8 @@ These globals are pre-loaded — no imports needed:
 ### Calling a CDP method
 
 Every method takes a single object argument matching the CDP wire params; it resolves to the typed return value (no `result` envelope, no `id` correlation — handled for you).
+
+For target-scoped domains (Page/DOM/Runtime/Network/Input/etc.), run the snippet with `browser-harness-js --session <id> ...`. `Browser.*`, `Target.*`, and `Extensions.*` stay on the browser endpoint.
 
 ```js
 // no params
@@ -151,16 +152,7 @@ await session.connect({ profileDir: '/Users/<you>/Library/Application Support/Go
 
 ### Picking a target (tab)
 
-After `connect()`, call `session.use(targetId)` once; subsequent page-level calls (Page/DOM/Runtime/Network/etc.) auto-route to that target's sessionId. `Browser.*` and `Target.*` calls always hit the browser endpoint.
-
-```js
-const tabs = await listPageTargets()                     // no args; uses the connected session
-const sid  = await session.use(tabs[0].targetId)
-await session.Page.enable()
-await session.Page.navigate({ url: 'https://example.com' })
-```
-
-**Concurrent agents:** prefer `session.attach(targetId)` (which does not change the shared active session), keep the returned sessionId, and pass `--session <id>` on every later target-scoped CLI call. The same long-lived CDP session is reused across calls, including event subscriptions/waits, without another caller's `session.use()` changing its route.
+Treat the REPL as shared. After `connect()`, attach the target once, keep the returned sessionId in the agent/task context, and pass it explicitly on every later target-scoped CLI call. Do not rely on a shared "current target".
 
 ```bash
 browser-harness-js 'await session.attach((await listPageTargets())[0].targetId)'  # prints <sessionId>
@@ -168,7 +160,7 @@ browser-harness-js --session '<sessionId>' 'await session.Page.enable()'
 browser-harness-js --session '<sessionId>' '(await session.Runtime.evaluate({expression:"document.title",returnByValue:true})).result.value'
 ```
 
-`session.use(targetId)` remains available for single-caller/backward-compatible workflows; do not rely on its shared active session for concurrent agents. When `--session <id>` is used, `session.onEvent(...)` and `session.waitFor(...)` are automatically filtered to that session.
+The same attached sessionId can be reused across many CLI calls, including long-lived domain state and event subscriptions/waits. When `--session <id>` is used, `session.onEvent(...)` and `session.waitFor(...)` are automatically filtered to that session.
 
 `listPageTargets()` uses CDP's `Target.getTargets` (not `/json`), so it works on Chrome 144+ too. It already filters out `chrome://` and `devtools://` URLs. Equivalent raw call:
 
@@ -177,9 +169,11 @@ const { targetInfos } = await session.Target.getTargets({})
 const tabs = targetInfos.filter(t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://'))
 ```
 
-To switch tabs: `session.use(otherTargetId)`. To detach: `session.setActiveSession(undefined)`.
+To work with another target, attach it and keep its own sessionId; there is no global "switch tab" step. To detach an attachment explicitly, call `session.Target.detachFromTarget({ sessionId: '<sessionId>' })`.
 
 ### Events
+
+Run target-scoped event work with `--session <id>` so listeners and waits are filtered to that attached session.
 
 ```js
 // Subscribe (returns an unsubscribe fn)
@@ -199,12 +193,11 @@ const ev = await session.waitFor(
 Each snippet runs inside its own async wrapper, so its `let`/`const` declarations vanish when it returns. To carry data forward, attach to `globalThis`:
 
 ```bash
-browser-harness-js '(await listPageTargets()).forEach((t,i)=>globalThis["tab"+i]=t.targetId)'
-browser-harness-js 'await session.use(globalThis.tab0)'
-browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
+browser-harness-js 'globalThis.note = "inspection started"'
+browser-harness-js 'globalThis.note'
 ```
 
-`session` itself, the active sessionId, and event subscribers are already preserved by the server — globals are only needed for ad-hoc data.
+The browser connection, attached CDP sessions, and event subscribers are preserved by the server. Keep routing sessionIds in the agent/task context and pass them with `--session`; use globals only for ad-hoc shared data that is intentionally safe to share.
 
 ## Connecting to a running Chrome (chrome://inspect flow)
 
