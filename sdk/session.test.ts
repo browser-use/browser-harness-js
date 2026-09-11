@@ -112,4 +112,25 @@ describe('Session CDP routing', () => {
 
     expect(received).toEqual(['Network.requestWillBeSent']);
   });
+
+  test('scoped waitFor ignores a matching event from another session', async () => {
+    const session = new Session();
+    const scoped = session.withSession('session-a');
+    const waiting = scoped.waitFor<{ requestId: string }>('Network.requestWillBeSent', undefined, 1_000);
+
+    // 先故意送一个“方法名完全相同、但来自另一个 session”的事件。
+    // 如果过滤失效，waiting 会错误地拿到 requestId=b；正确实现必须继续等待。
+    (session as any).onMessage(JSON.stringify({
+      method: 'Network.requestWillBeSent',
+      params: { requestId: 'b' },
+      sessionId: 'session-b',
+    }));
+    (session as any).onMessage(JSON.stringify({
+      method: 'Network.requestWillBeSent',
+      params: { requestId: 'a' },
+      sessionId: 'session-a',
+    }));
+
+    expect(await waiting).toEqual({ requestId: 'a' });
+  });
 });
