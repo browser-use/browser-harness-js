@@ -13,7 +13,7 @@
  * the process.
  */
 
-import { Session, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
+import { Session, type ScopedSession, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
 import * as Generated from './generated.ts';
 
 const session = new Session();
@@ -45,10 +45,23 @@ function serialize(v: unknown): unknown {
   }
 }
 
-async function runSnippet(code: string): Promise<unknown> {
+/**
+ * 在一次 /eval 请求中执行代码。
+ *
+ * 关键点：`evalSession` 是“本次请求自己的 session 视图”。如果 CLI 带了
+ * `--session <id>`，这里收到的是固定绑定到该 id 的 ScopedSession；否则仍然
+ * 使用旧的根 Session。这样并发请求不会通过共享 activeSessionId 互相改路由。
+ */
+async function runSnippet(code: string, evalSession: Session | ScopedSession): Promise<unknown> {
   const body = isExpression(code) ? `return (${code});` : code;
-  const wrapped = `(async () => { ${body} })()`;
-  return await (0, eval)(wrapped);
+
+  // 用函数参数提供局部 `session`，避免为了某个请求去改 globalThis.session。
+  // 其余 helper 仍然挂在 globalThis 上，因此现有 snippet 的写法保持不变。
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    ...args: string[]
+  ) => (...args: unknown[]) => Promise<unknown>;
+  const fn = new AsyncFunction('session', body);
+  return await fn(evalSession);
 }
 
 const TEXT = { 'content-type': 'text/plain; charset=utf-8' } as const;
@@ -89,7 +102,11 @@ const server = Bun.serve({
         return new Response('empty body\n', { status: 400, headers: TEXT });
       }
       try {
-        const result = await runSnippet(code);
+        // CLI 用 header 显式声明“本次请求属于哪个长期 CDP session”。
+        // 不带 header 时继续走旧的 shared activeSessionId，保持上游兼容。
+        const requestedSessionId = req.headers.get('x-browser-harness-session-id')?.trim();
+        const evalSession = requestedSessionId ? session.withSession(requestedSessionId) : session;
+        const result = await runSnippet(code, evalSession);
         const body = renderResult(result);
         return new Response(body, { status: 200, headers: TEXT });
       } catch (e: any) {

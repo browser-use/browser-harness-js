@@ -4,6 +4,7 @@
 # Usage:
 #   browser-harness-js 'await session.connect({port:9222})'
 #   browser-harness-js 'await session.Page.navigate({url:"https://example.com"})'
+#   browser-harness-js --session <sessionId> 'await session.Page.navigate({url:"https://example.com"})'
 #   browser-harness-js <<'EOF'
 #     const t = await listPageTargets("localhost", 9222);
 #     globalThis.tid = t[0].targetId;
@@ -22,6 +23,25 @@ set -euo pipefail
 PORT="${CDP_REPL_PORT:-9876}"
 HOST="127.0.0.1"
 URL="http://$HOST:$PORT"
+SESSION_ID=""
+
+# 并发安全模式：调用者显式携带自己的长期 CDP sessionId。
+# 这里只解析 CLI 参数，不创建/销毁 session；同一个 id 可以跨多次 CLI 调用复用。
+if [ "${1:-}" = "--session" ]; then
+  if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then
+    echo "browser-harness-js: --session requires a non-empty sessionId" >&2
+    exit 2
+  fi
+  SESSION_ID="$2"
+  shift 2
+elif [[ "${1:-}" == --session=* ]]; then
+  SESSION_ID="${1#--session=}"
+  if [ -z "$SESSION_ID" ]; then
+    echo "browser-harness-js: --session requires a non-empty sessionId" >&2
+    exit 2
+  fi
+  shift
+fi
 
 # Resolve repl.ts alongside this script, following symlinks (e.g. /usr/local/bin/browser-harness-js → <skill-dir>/sdk/browser-harness-js).
 SCRIPT_PATH="${BASH_SOURCE[0]}"
@@ -80,7 +100,13 @@ post_eval() {
   # Capture body + status separately. Body goes to stdout (only if non-empty)
   # on 200; otherwise to stderr with non-zero exit.
   local out status body
-  out=$(curl -sS -w '\n___STATUS___%{http_code}' --data-binary "$1" "$URL/eval")
+  if [ -n "$SESSION_ID" ]; then
+    out=$(curl -sS -w '\n___STATUS___%{http_code}' \
+      -H "X-Browser-Harness-Session-Id: $SESSION_ID" \
+      --data-binary "$1" "$URL/eval")
+  else
+    out=$(curl -sS -w '\n___STATUS___%{http_code}' --data-binary "$1" "$URL/eval")
+  fi
   status="${out##*___STATUS___}"
   body="${out%$'\n'___STATUS___*}"
   if [ "$status" = "200" ]; then
