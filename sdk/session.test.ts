@@ -133,4 +133,17 @@ describe('Session CDP routing', () => {
 
     expect(await waiting).toEqual({ requestId: 'a' });
   });
+
+  test('scoped waitFor can observe browser-level events without a sessionId', async () => {
+    const session = new Session();
+    const scoped = session.withSession('session-a');
+    const waiting = scoped.waitFor<{ targetInfo: { targetId: string } }>('Target.targetCreated', undefined, 1_000);
+
+    (session as any).onMessage(JSON.stringify({
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'new-target' } },
+    }));
+
+    expect(await waiting).toEqual({ targetInfo: { targetId: 'new-target' } });
+  });
 });
