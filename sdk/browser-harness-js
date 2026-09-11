@@ -84,6 +84,13 @@ is_up() {
   curl -fsS --max-time 1 "$URL/health" >/dev/null 2>&1
 }
 
+# `--session` 只有在后台 REPL 同样升级后才安全。旧 REPL 会忽略新 header，
+# 因此这里必须显式探测能力并 fail closed，不能让调用者误以为已经固定路由。
+supports_explicit_session_routing() {
+  curl -fsS --max-time 1 "$URL/health" 2>/dev/null \
+    | grep -q '"explicitSessionRouting":true'
+}
+
 start_repl() {
   is_up && return 0
   ensure_bun || return 1
@@ -101,6 +108,10 @@ post_eval() {
   # on 200; otherwise to stderr with non-zero exit.
   local out status body
   if [ -n "$SESSION_ID" ]; then
+    if ! supports_explicit_session_routing; then
+      echo "browser-harness-js: the running REPL is too old for --session; restart it before using explicit session routing." >&2
+      return 1
+    fi
     out=$(curl -sS -w '\n___STATUS___%{http_code}' \
       -H "X-Browser-Harness-Session-Id: $SESSION_ID" \
       --data-binary "$1" "$URL/eval")

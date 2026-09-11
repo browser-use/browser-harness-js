@@ -93,6 +93,9 @@ const server = Bun.serve({
         uptime: Math.floor((Date.now() - startedAt) / 1000),
         connected: session.isConnected(),
         sessionId: session.getActiveSession() ?? null,
+        // CLI 在 --session 模式下用这个能力位确认后台确实理解请求级 session 路由。
+        // 这样升级 CLI 但旧 REPL 仍驻留内存时，会 fail closed，而不是静默退化成不安全路由。
+        capabilities: { explicitSessionRouting: true },
       });
     }
 
