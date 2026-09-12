@@ -13,8 +13,7 @@
  * the process.
  */
 
-import { Session, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
-import { runSnippet } from './snippet.ts';
+import { Session, type ScopedSession, listPageTargets, resolveWsUrl, detectBrowsers } from './session.ts';
 import * as Generated from './generated.ts';
 
 const session = new Session();
@@ -29,6 +28,14 @@ const session = new Session();
 const PORT = Number(process.env.CDP_REPL_PORT ?? 9876);
 const startedAt = Date.now();
 
+function isExpression(code: string): boolean {
+  const trimmed = code.trim();
+  if (!trimmed) return false;
+  if (/[;\n]/.test(trimmed)) return false;
+  if (/^(let|const|var|if|for|while|do|switch|class|function|throw|try|return|import|export)\b/.test(trimmed)) return false;
+  return true;
+}
+
 function serialize(v: unknown): unknown {
   if (v === undefined) return undefined;
   try {
@@ -36,6 +43,25 @@ function serialize(v: unknown): unknown {
   } catch {
     return String(v);
   }
+}
+
+/**
+ * 在一次 /eval 请求中执行代码。
+ *
+ * 关键点：`evalSession` 是“本次请求自己的 session 视图”。如果 CLI 带了
+ * `--session <id>`，这里收到的是固定绑定到该 id 的 ScopedSession；否则仍然
+ * 使用旧的根 Session。这样并发请求不会通过共享 activeSessionId 互相改路由。
+ */
+async function runSnippet(code: string, evalSession: Session | ScopedSession): Promise<unknown> {
+  const body = isExpression(code) ? `return (${code});` : code;
+
+  // 用函数参数提供局部 `session`，避免为了某个请求去改 globalThis.session。
+  // 其余 helper 仍然挂在 globalThis 上，因此现有 snippet 的写法保持不变。
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    ...args: string[]
+  ) => (...args: unknown[]) => Promise<unknown>;
+  const fn = new AsyncFunction('session', body);
+  return await fn(evalSession);
 }
 
 const TEXT = { 'content-type': 'text/plain; charset=utf-8' } as const;

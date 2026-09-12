@@ -185,17 +185,10 @@ export class Session implements Transport {
     };
   }
 
-  /**
-   * Subscribe to events for one attached CDP session, plus browser-level events.
-   * Browser/Target/Extensions events are emitted without a target sessionId, so a
-   * scoped caller must still be able to observe them just as its browser-level
-   * commands are sent through the root connection.
-   */
+  /** Subscribe only to events emitted by one attached CDP session. */
   onEventFor(sessionId: string, fn: EventListener): () => void {
     return this.onEvent((method, params, eventSessionId) => {
-      const isOwnTargetEvent = eventSessionId === sessionId;
-      const isRootEvent = eventSessionId === undefined && isBrowserLevel(method);
-      if (!isOwnTargetEvent && !isRootEvent) return;
+      if (eventSessionId !== sessionId) return;
       fn(method, params, eventSessionId);
     });
   }
