@@ -185,10 +185,21 @@ export class Session implements Transport {
     };
   }
 
-  /** Subscribe only to events emitted by one attached CDP session. */
+  /**
+   * 订阅某个 attached CDP session 的事件，同时保留浏览器级事件。
+   *
+   * Page/Runtime/Network 等 target 级事件会携带 `sessionId`，因此可以严格只收
+   * 当前 session 的事件；但 Browser/Target/Extensions 属于浏览器级域，它们的
+   * 事件本来就可能没有 `sessionId`。这里把这类 root event 当作广播事件交给
+   * 每个 scoped listener，避免显式 `--session` 模式把原本可见的浏览器级事件
+   * 静默丢掉。调用方如果只关心某个 target，应继续用 predicate 按 targetId 等
+   * 业务字段筛选，而不是假设 root event 自带 session 归属。
+   */
   onEventFor(sessionId: string, fn: EventListener): () => void {
     return this.onEvent((method, params, eventSessionId) => {
-      if (eventSessionId !== sessionId) return;
+      const isOwnTargetEvent = eventSessionId === sessionId;
+      const isBrowserLevelEvent = eventSessionId === undefined && isBrowserLevel(method);
+      if (!isOwnTargetEvent && !isBrowserLevelEvent) return;
       fn(method, params, eventSessionId);
     });
   }

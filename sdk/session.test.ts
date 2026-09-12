@@ -133,4 +133,19 @@ describe('Session CDP routing', () => {
 
     expect(await waiting).toEqual({ requestId: 'a' });
   });
+
+  test('scoped waitFor keeps browser-level events visible when they have no sessionId', async () => {
+    const session = new Session();
+    const scoped = session.withSession('session-a');
+    const waiting = scoped.waitFor<{ targetInfo: { targetId: string } }>('Target.targetCreated', undefined, 1_000);
+
+    // Target.* 是浏览器级事件，CDP 消息不会附带某个 page sessionId。
+    // 显式 session 路由不能因此把它直接过滤掉；需要时由调用方再按 targetId 等字段筛选。
+    (session as any).onMessage(JSON.stringify({
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'new-target' } },
+    }));
+
+    expect(await waiting).toEqual({ targetInfo: { targetId: 'new-target' } });
+  });
 });
