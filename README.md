@@ -63,7 +63,8 @@ Every helper is a lie about what CDP already gives you. `click(x, y)` hides `Inp
 The only "helpers" you'll find are things CDP itself is missing:
 - `listPageTargets()` — filters `chrome://` / `devtools://` out of `Target.getTargets`
 - `resolveWsUrl({wsUrl|port|profileDir})` — reads `DevToolsActivePort` for Chrome 144+
-- `session.use(targetId)` / `session.waitFor(method, pred, timeout)` — the two routing primitives you genuinely need
+- `session.attach(targetId)` + explicit `--session <id>` routing — keep multiple long-lived target sessions isolated on one browser WebSocket
+- `session.waitFor(method, pred, timeout)` — wait for events; under `--session`, waits are scoped to that attached session
 
 ## Contributing
 

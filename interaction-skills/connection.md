@@ -62,22 +62,27 @@ let targetId = tabs[0]?.targetId
 if (!targetId) {
   ({ targetId } = await session.Target.createTarget({ url: 'about:blank' }))
 }
-await session.use(targetId)
+const sessionId = await session.attach(targetId)
+return sessionId
 ```
+
+Keep the returned sessionId in the agent/task context. Run every later target-scoped command with `browser-harness-js --session <sessionId> ...`.
 
 ## Startup sequence
 
 1. `await session.connect()` — auto-detect the running browser.
 2. `const tabs = await listPageTargets()` — see what real pages exist.
-3. `await session.use(tabs[0].targetId)` — route Page/DOM/Runtime/Network calls to that target.
+3. `await session.attach(tabs[0].targetId)` — attach once and keep the returned sessionId.
 4. `await session.Target.activateTarget({ targetId: tabs[0].targetId })` — bring the tab visually to front.
-5. Enable the domains you need: `await session.Page.enable()`, `await session.Network.enable({})`, etc.
+5. For every later Page/DOM/Runtime/Network/Input call, invoke the CLI with `--session <sessionId>`; enable the domains you need on that same long-lived session.
+
+Do not use a shared "current target" as routing state. The REPL may be shared by multiple callers.
 
 ## CDP target order ≠ visible tab-strip order
 
 When the user says "the first tab I can see", do NOT trust the order of `Target.getTargets`. Use:
 
-- A screenshot (`session.Page.captureScreenshot()`) to identify visually.
+- A screenshot (`session.Page.captureScreenshot()` run with that target's explicit sessionId) to identify visually.
 - Page title / URL heuristics.
 - Or platform UI automation (macOS: AppleScript; Linux: `xdotool`/`wmctrl`).
 

@@ -4,7 +4,7 @@ Cross-origin iframes (stripe.com checkout, recaptcha, Salesforce Lightning, Azur
 
 ## First try: coordinate clicks
 
-Compositor-level input passes through OOPIFs transparently. If the thing you want is a button you can see in a screenshot, try this first — it's simpler, undetectable, and doesn't need attaching to anything:
+Compositor-level input passes through OOPIFs transparently. If the thing you want is a button you can see in a screenshot, try this first — it's simpler and does not require a separate iframe attachment. Run the input commands on the parent page's explicit sessionId:
 
 ```js
 // Click a "Pay" button inside a Stripe iframe by page coordinates
@@ -16,26 +16,25 @@ Coordinate-based typing also works if you click first, then `Input.insertText`/`
 
 ## When you need DOM inside the OOPIF
 
-Find the iframe target and route Runtime/DOM calls to it:
+Find the iframe target, attach it, and keep its own sessionId. The parent page session stays attached independently:
 
 ```js
 const { targetInfos } = await session.Target.getTargets({})
 const iframe = targetInfos.find(t => t.type === 'iframe' && t.url.includes('stripe.com'))
 
-// Route subsequent calls to the iframe target
-await session.use(iframe.targetId)
-
-await session.Runtime.enable()
-const { result } = await session.Runtime.evaluate({
-  expression: 'document.querySelector("[name=cardnumber]").value',
-  returnByValue: true,
-})
-
-// Switch back to the parent page when done
-await session.use(parentTargetId)
+// Attach without changing any shared "current target".
+const iframeSessionId = await session.attach(iframe.targetId)
+return iframeSessionId
 ```
 
-`session.use(iframe.targetId)` auto-attaches if not already attached, and routes Page/DOM/Runtime/Network to it. `Target.*` and `Browser.*` always hit the browser endpoint regardless of `use`.
+Then run iframe-scoped commands with that sessionId:
+
+```bash
+browser-harness-js --session '<iframeSessionId>' 'await session.Runtime.enable()'
+browser-harness-js --session '<iframeSessionId>' '(await session.Runtime.evaluate({expression:"document.querySelector(\"[name=cardnumber]\").value",returnByValue:true})).result.value'
+```
+
+Use the parent page's sessionId for parent-scoped work and the iframe sessionId for iframe-scoped work. Both can remain attached at the same time. `Target.*` and `Browser.*` still hit the browser endpoint.
 
 ## Which target is which?
 
@@ -47,16 +46,11 @@ await session.use(parentTargetId)
 
 ## Listening to events from an OOPIF
 
-After `session.use(iframe.targetId)`, events for that target arrive via the same `session.onEvent` / `session.waitFor`:
+With the iframe's explicit sessionId, `session.onEvent` / `session.waitFor` are filtered to events from that iframe attachment:
 
-```js
-await session.use(iframe.targetId)
-await session.Network.enable({})
-const ev = await session.waitFor(
-  'Network.responseReceived',
-  (p) => p.response.url.includes('/confirm_payment'),
-  10_000
-)
+```bash
+browser-harness-js --session '<iframeSessionId>' 'await session.Network.enable({})'
+browser-harness-js --session '<iframeSessionId>' 'await session.waitFor("Network.responseReceived", p => p.response.url.includes("/confirm_payment"), 10_000)'
 ```
 
 ## Traps
@@ -64,4 +58,4 @@ const ev = await session.waitFor(
 - **An OOPIF is not always present until interaction.** Stripe's card iframe is lazy-mounted after you focus the outer input. Screenshot + coordinate-click the outer input first, then re-query `Target.getTargets`.
 - **OOPIF targets disappear when the parent navigates.** A cached `iframe.targetId` from before a navigation is dead.
 - **CSP / sandbox may block `Runtime.evaluate` side effects** even when you've attached. Read-only calls usually work; writes may silently no-op.
-- **Don't `use(iframe.targetId)` and forget to switch back.** Your next `Page.navigate` goes to the iframe instead of the main frame. Always pair with a `session.use(parentTargetId)`.
+- **Keep parent and iframe sessionIds distinct.** A target-scoped command goes exactly to the sessionId supplied on that CLI call; do not substitute one target's sessionId for another.

@@ -13,6 +13,8 @@ type Pending = {
   reject: (e: unknown) => void;
 };
 
+type EventListener = (method: string, params: unknown, sessionId?: string) => void;
+
 export type ConnectOptions = {
   /** Full WS URL: ws://host:port/devtools/browser/<id>. Escape hatch. */
   wsUrl?: string;
@@ -46,7 +48,7 @@ export class Session implements Transport {
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private activeSessionId: string | undefined;
-  private eventListeners: Array<(method: string, params: unknown, sessionId?: string) => void> = [];
+  private eventListeners: EventListener[] = [];
 
   // Generated bindings — one per CDP domain.
   // Initialized lazily after construction so `_call` is available.
@@ -134,16 +136,39 @@ export class Session implements Transport {
   }
 
   /**
-   * Pick a target and make subsequent calls auto-route to it.
-   * Uses Target.attachToTarget with flatten:true (single-WS, sessionId-on-message).
+   * Attach to a target without changing the legacy global active session.
+   *
+   * 这是并发安全路径的第一步：Chrome 返回的 sessionId 可以长期复用，
+   * 后续由 `withSession(sessionId)`（或 CLI 的 `--session`）把每次调用固定
+   * 路由到该 attachment。底层仍然只有一根 browser WebSocket。
    */
-  async use(targetId: string): Promise<string> {
+  async attach(targetId: string): Promise<string> {
     const r = await this._call('Target.attachToTarget', { targetId, flatten: true }) as { sessionId: string };
-    this.activeSessionId = r.sessionId;
     return r.sessionId;
   }
 
-  /** Set the active sessionId directly (e.g. one you already attached). */
+  /**
+   * Legacy single-caller convenience API.
+   * Pick a target and make subsequent unscoped calls auto-route to it.
+   */
+  async use(targetId: string): Promise<string> {
+    const sessionId = await this.attach(targetId);
+    this.activeSessionId = sessionId;
+    return sessionId;
+  }
+
+  /**
+   * Create a lightweight view permanently bound to one CDP sessionId.
+   *
+   * 这个对象不会复制 WebSocket，也不会新建 Chrome session；它只是让生成的
+   * Page/DOM/Runtime/Network 等原始 CDP 方法在发消息时固定携带该 sessionId。
+   */
+  withSession(sessionId: string): ScopedSession {
+    if (!sessionId) throw new Error('sessionId is required');
+    return new ScopedSession(this, sessionId);
+  }
+
+  /** Set the active sessionId directly (legacy single-caller mode). */
   setActiveSession(sessionId: string | undefined): void {
     this.activeSessionId = sessionId;
   }
@@ -153,11 +178,30 @@ export class Session implements Transport {
   }
 
   /** Subscribe to all CDP events. Returns an unsubscribe fn. */
-  onEvent(fn: (method: string, params: unknown, sessionId?: string) => void): () => void {
+  onEvent(fn: EventListener): () => void {
     this.eventListeners.push(fn);
     return () => {
       this.eventListeners = this.eventListeners.filter(x => x !== fn);
     };
+  }
+
+  /**
+   * 订阅某个 attached CDP session 的事件，同时保留浏览器级事件。
+   *
+   * Page/Runtime/Network 等 target 级事件会携带 `sessionId`，因此可以严格只收
+   * 当前 session 的事件；但 Browser/Target/Extensions 属于浏览器级域，它们的
+   * 事件本来就可能没有 `sessionId`。这里把这类 root event 当作广播事件交给
+   * 每个 scoped listener，避免显式 `--session` 模式把原本可见的浏览器级事件
+   * 静默丢掉。调用方如果只关心某个 target，应继续用 predicate 按 targetId 等
+   * 业务字段筛选，而不是假设 root event 自带 session 归属。
+   */
+  onEventFor(sessionId: string, fn: EventListener): () => void {
+    return this.onEvent((method, params, eventSessionId) => {
+      const isOwnTargetEvent = eventSessionId === sessionId;
+      const isBrowserLevelEvent = eventSessionId === undefined && isBrowserLevel(method);
+      if (!isOwnTargetEvent && !isBrowserLevelEvent) return;
+      fn(method, params, eventSessionId);
+    });
   }
 
   /** Wait for the next event matching `method` (and optional predicate). */
@@ -177,15 +221,45 @@ export class Session implements Transport {
     });
   }
 
+  /** Wait for an event from one specific attached CDP session. */
+  waitForSession<T = unknown>(
+    sessionId: string,
+    method: string,
+    predicate?: (params: T) => boolean,
+    timeoutMs = 30_000,
+  ): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        unsub();
+        reject(new Error(`Timeout waiting for ${method} on session ${sessionId}`));
+      }, timeoutMs);
+      const unsub = this.onEventFor(sessionId, (m, params) => {
+        if (m !== method) return;
+        if (predicate && !predicate(params as T)) return;
+        clearTimeout(timer);
+        unsub();
+        resolve(params as T);
+      });
+    });
+  }
+
   // Transport implementation. Called by the generated domain bindings.
   _call(method: string, params: unknown = {}): Promise<unknown> {
+    return this._callWithSession(this.activeSessionId, method, params);
+  }
+
+  /**
+   * Send one CDP command with an explicit target session route.
+   * Browser/Target/Extensions commands intentionally stay on the browser endpoint.
+   */
+  _callWithSession(sessionId: string | undefined, method: string, params: unknown = {}): Promise<unknown> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('Not connected. Call session.connect(...) first.'));
     }
     const id = this.nextId++;
     const msg: Record<string, unknown> = { id, method, params: params ?? {} };
-    if (this.activeSessionId && !isBrowserLevel(method)) {
-      msg.sessionId = this.activeSessionId;
+    if (sessionId && !isBrowserLevel(method)) {
+      msg.sessionId = sessionId;
     }
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -210,6 +284,43 @@ export class Session implements Transport {
   }
 }
 
+/**
+ * A concurrency-safe view of the shared Session, pinned to one CDP sessionId.
+ *
+ * 它复用根 Session 的同一根 WebSocket 和 pending/event machinery；唯一差别是
+ * 所有 target-scoped 调用都显式带固定 sessionId，事件帮助函数也只接收该
+ * session 的事件。因此别的 Agent 修改 legacy activeSessionId 不会让它漂移。
+ */
+export class ScopedSession implements Transport {
+  domains!: Domains;
+
+  constructor(private readonly root: Session, readonly sessionId: string) {
+    this.domains = bindDomains(this);
+    for (const k of Object.keys(this.domains) as (keyof Domains)[]) {
+      (this as any)[k] = this.domains[k];
+    }
+  }
+
+  isConnected(): boolean {
+    return this.root.isConnected();
+  }
+
+  getActiveSession(): string {
+    return this.sessionId;
+  }
+
+  onEvent(fn: EventListener): () => void {
+    return this.root.onEventFor(this.sessionId, fn);
+  }
+
+  waitFor<T = unknown>(method: string, predicate?: (params: T) => boolean, timeoutMs = 30_000): Promise<T> {
+    return this.root.waitForSession(this.sessionId, method, predicate, timeoutMs);
+  }
+
+  _call(method: string, params: unknown = {}): Promise<unknown> {
+    return this.root._callWithSession(this.sessionId, method, params);
+  }
+}
 export class CdpError extends Error {
   constructor(public code: number, message: string, public data?: unknown) {
     super(`CDP ${code}: ${message}`);

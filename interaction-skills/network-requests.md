@@ -2,6 +2,8 @@
 
 Use `Network.*` events when the DOM doesn't tell you whether a request happened, what it sent, or what came back. Use `Fetch.*` when you need to intercept, modify, or mock.
 
+Run all target-scoped examples in this file with that target's explicit sessionId (`browser-harness-js --session <id> ...`). Event listeners and `waitFor` are then filtered to that attached session.
+
 ## Watching requests
 
 ```js
@@ -104,6 +106,6 @@ await session.waitFor(
 ## Traps
 
 - **`Network.enable` must be called before the request fires.** If you enable after the click, you'll miss the event. Enable once at session start and leave it.
-- **`Network.enable` is per-target.** After `session.use(iframe.targetId)`, call `Network.enable({})` again inside that target.
+- **`Network.enable` is per attached target session.** If you attach an iframe separately, call `Network.enable({})` with that iframe's sessionId as well.
 - **Request IDs are unique per target, not global.** Don't pass an iframe `requestId` to a main-frame `getResponseBody` call.
 - **`waitFor` will reject on timeout**, not return `null`. Wrap in `try/catch` if you don't want the whole snippet to fail when the request doesn't happen.

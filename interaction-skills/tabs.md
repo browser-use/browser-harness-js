@@ -8,35 +8,35 @@ Use **CDP for control** (attach, activate known targets, inspect). Use **UI auto
 // List page targets (filtered; chrome:// / devtools:// dropped)
 const tabs = await listPageTargets()
 
-// Create a new tab and route subsequent calls to it
+// Create a new tab, then attach it. Keep the returned sessionId.
 const { targetId } = await session.Target.createTarget({ url: 'https://example.com' })
-await session.use(targetId)
+const sessionId = await session.attach(targetId)
 
-// Switch: route calls to another existing tab
-await session.use(otherTargetId)
+// To work with another existing tab, attach it separately and keep its own sessionId.
+const otherSessionId = await session.attach(otherTargetId)
 
-// Show this tab visibly in Chrome (different from `session.use` — which is CDP routing only)
+// Show this tab visibly in Chrome. This is independent from CDP session routing.
 await session.Target.activateTarget({ targetId })
 
 // Close a tab
 await session.Target.closeTarget({ targetId })
 
-// What tab is session.use currently pointing at?
+// Inspect a known target directly.
 const { targetInfo } = await session.Target.getTargetInfo({ targetId })
 ```
 
-**`session.use` is CDP-side routing; `Target.activateTarget` is Chrome-side focus.** They are independent. If the user expects Chrome to visibly change, call `activateTarget` too.
+For target-scoped work, use the corresponding sessionId on every CLI call: `browser-harness-js --session <sessionId> ...`. Multiple target sessions can remain attached at the same time; there is no global "switch tab" routing step.
+
+**Explicit CDP session routing and `Target.activateTarget` are independent.** The former chooses where protocol commands go; the latter changes Chrome-side visible focus. If the user expects Chrome to visibly change, call `activateTarget` too.
 
 ## Two things `Target.createTarget` quietly gets wrong
 
 1. **Race: `{ url }` in `createTarget` can resolve before navigation starts.** If you then poll `document.readyState`, you'll see `'complete'` for about:blank and move on. Safer:
    ```js
    const { targetId } = await session.Target.createTarget({ url: 'about:blank' })
-   await session.use(targetId)
-   await session.Page.enable()
-   await session.Page.navigate({ url: 'https://example.com' })
-   // now wait for Page.loadEventFired via session.waitFor
+   const sessionId = await session.attach(targetId)
    ```
+   Then run `Page.enable`, `Page.navigate`, and the `Page.loadEventFired` wait with `browser-harness-js --session <sessionId> ...`.
 
 2. **New tab may open behind the active one.** Add `Target.activateTarget` if the user needs to see it.
 
