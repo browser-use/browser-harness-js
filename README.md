@@ -1,7 +1,7 @@
 <img src="https://r2.browser-use.com/github/asbfgihsbfbaosfjla.png" alt="Browser Harness" width="100%" />
 
 > [!IMPORTANT]
-> **This repo is no longer the recommended path. Use [Browser Use](https://github.com/browser-use/browser-use).** Browser Use 1.0 merged this experiment into one product: your agent, in any language, drives Chrome through raw CDP plus the browser-harness helpers, via a CLI that takes piped Python or an MCP server.
+> **This repo is no longer the recommended path. Use [Browser Use](https://github.com/browser-use/browser-use).** Browser Use 1.0 is where this work continues: your coding agent drives Chrome over raw CDP with the browser-harness helpers, by piping Python to the `browser-use` CLI or through its MCP server.
 >
 > ```bash
 > uv tool install browser-use
