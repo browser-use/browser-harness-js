@@ -1,5 +1,18 @@
 <img src="https://r2.browser-use.com/github/asbfgihsbfbaosfjla.png" alt="Browser Harness" width="100%" />
 
+> [!IMPORTANT]
+> **This repo is no longer the recommended path. Use [Browser Use](https://github.com/browser-use/browser-use).** Browser Use 1.0 is where this work continues: your coding agent drives Chrome over raw CDP with the browser-harness helpers, by piping Python to the `browser-use` CLI or through its MCP server.
+>
+> ```bash
+> uv tool install browser-use
+> browser-use <<'PY'
+> new_tab("https://example.com")
+> print(page_info())
+> PY
+> ```
+>
+> MCP server: `browser-use --cli-mcp`. This repo stays up as the JS/TS CDP bridge, for reference.
+
 # Browser Harness JS ♞
 
 The thinnest possible bridge from the LLM to Chrome. **No harness, no recipes, no rails** — just every CDP method as a typed JS call.
@@ -18,7 +31,9 @@ One persistent WebSocket, 56 domains, 652 typed wrappers, zero wrapping of what 
 
 **The protocol is the API.** If Chrome can do it, you can call it.
 
-## Installation
+## Installation (legacy)
+
+For new setups use [Browser Use](https://github.com/browser-use/browser-use) (see the top of this page). To run this repo anyway:
 
 ```bash
 npx skills add https://github.com/browser-use/browser-harness-js --skill cdp
